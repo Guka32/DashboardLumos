@@ -157,17 +157,14 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
     // Parse ID 0x200 (Battery Control PCB)
     if (rxHeader.StdId == 0x200)
     {
-      if (rxHeader.DLC >= 8)
+      if (rxHeader.DLC >= 4)
       {
-        float volt, curr;
+        float volt;
         uint8_t *v_ptr = (uint8_t*)&volt;
-        uint8_t *c_ptr = (uint8_t*)&curr;
         for(int i = 0; i < 4; i++) {
           v_ptr[i] = rxData[i];
-          c_ptr[i] = rxData[i+4];
         }
         status.battery_voltage = volt;
-        status.battery_current = curr;
       }
       status.battery_pcb_last_seen = HAL_GetTick();
     }
@@ -181,9 +178,13 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
       }
       status.actuator_pcb_last_seen = HAL_GetTick();
     }
-    // Parse ID 0x100 (Main PCB Heartbeat)
+    // Parse ID 0x100 (Main PCB Heartbeat / PWM Status)
     else if (rxHeader.StdId == 0x100)
     {
+      if (rxHeader.DLC >= 1)
+      {
+        status.pwm_received = rxData[0];
+      }
       status.main_pcb_last_seen = HAL_GetTick();
     }
   }
@@ -223,18 +224,9 @@ int main(void)
   MX_CAN2_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-
   CAN_Start_Peripherals();
   uint32_t last_hb_tick = 0;
   uint32_t last_telemetry_tick = 0;
-  
-  // Initialize mock GPS positions
-  status.gps1_lat = 25.67142;
-  status.gps1_lon = -100.30971;
-  status.gps1_fix = 4; // RTK Fixed
-  status.gps2_lat = 25.67145;
-  status.gps2_lon = -100.30973;
-  status.gps2_fix = 2; // 3D Fix
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -248,40 +240,15 @@ int main(void)
       CAN_Send_Heartbeat();
       last_hb_tick = HAL_GetTick();
     }
-    
-    // 2. Broadcast NMEA Telemetry over USART2 (5 Hz / 200 ms)
+    // 2. Broadcast Simplified Telemetry over USART2 (5 Hz / 200 ms)
     if (HAL_GetTick() - last_telemetry_tick >= 200)
     {
       last_telemetry_tick = HAL_GetTick();
       status.gateway_uptime = last_telemetry_tick;
       
-      // Simulate minor GPS drift to demonstrate motion on Grafana
-      status.gps1_lat += 0.00001;
-      status.gps1_lon += 0.000005;
-      status.gps2_lat += 0.00001;
-      status.gps2_lon += 0.000005;
-      
-      // Read local ADC backup battery (mock 3.28V)
-      status.local_battery_voltage = 3.28f;
-      
-      // Format and send $PSTAT sentence
       char tx_buf[128];
-      int len = generate_nmea_sentence(tx_buf, sizeof(tx_buf), "PSTAT", "%lu,%.2f,%.2f,%u,%u,%.2f",
-                                       status.gateway_uptime,
-                                       status.battery_voltage,
-                                       status.battery_current,
-                                       status.pump_active,
-                                       status.actuator_active,
-                                       status.local_battery_voltage);
-      if (len > 0)
-      {
-        HAL_UART_Transmit(&huart2, (uint8_t*)tx_buf, len, 100);
-      }
+      int len = generate_telemetry_string(tx_buf, sizeof(tx_buf));
       
-      // Format and send $PGPS sentence
-      len = generate_nmea_sentence(tx_buf, sizeof(tx_buf), "PGPS", "%.6f,%.6f,%u,%.6f,%.6f,%u",
-                                   status.gps1_lat, status.gps1_lon, status.gps1_fix,
-                                   status.gps2_lat, status.gps2_lon, status.gps2_fix);
       if (len > 0)
       {
         HAL_UART_Transmit(&huart2, (uint8_t*)tx_buf, len, 100);

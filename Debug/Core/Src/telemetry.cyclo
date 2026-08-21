@@ -1,1 +1,1 @@
-../Core/Src/telemetry.c:15:5:generate_nmea_sentence	8
+../Core/Src/telemetry.c:14:5:generate_telemetry_string	7
