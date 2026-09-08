@@ -13,21 +13,22 @@
 
 typedef struct {
     uint32_t gateway_uptime;      // 1. Heartbeat
-    float battery_voltage;        // 2. Battery Voltage (Sniffed from Battery PCB ID 0x200)
-    uint8_t pwm_received;         // 3. PWM Received (Sniffed from Main PCB ID 0x100)
-    uint8_t actuator_active;      // 4. Actuator Active (Sniffed from Actuator PCB ID 0x150)
-    uint8_t pump_active;          // 5. Pump Active (Sniffed from Actuator PCB ID 0x150)
+    float battery_voltage;        // 2. Battery Voltage (0x200)
+    uint8_t actuator_active;      // 3. Actuators On/Off (0x150, Byte 0)
+    float heading;                // 4. Heading (0x301)
+    float latitude;               // 5. Latitude (0x300, Bytes 0-3)
+    float longitude;              // 6. Longitude (0x300, Bytes 4-7)
     
     // Keep track of node activity
-    uint32_t main_pcb_last_seen;
     uint32_t actuator_pcb_last_seen;
     uint32_t battery_pcb_last_seen;
+    uint32_t nav_pcb_last_seen;
 } SystemStatus;
 
 extern volatile SystemStatus status;
 
 /**
- * @brief Formats the simplified vital metrics string.
+ * @brief Formats the telemetry string for UART output (CSV format).
  * @param out_buf Buffer where the completed sentence will be stored.
  * @param max_len Maximum length of the output buffer.
  * @return Number of characters written, or -1 on overflow/error.

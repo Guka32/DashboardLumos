@@ -168,24 +168,45 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
       }
       status.battery_pcb_last_seen = HAL_GetTick();
     }
-    // Parse ID 0x150 (Actuator Control PCB)
+    // Parse ID 0x150 (Actuator Control PCB - ON/OFF)
     else if (rxHeader.StdId == 0x150)
-    {
-      if (rxHeader.DLC >= 2)
-      {
-        status.pump_active = rxData[0];
-        status.actuator_active = rxData[1];
-      }
-      status.actuator_pcb_last_seen = HAL_GetTick();
-    }
-    // Parse ID 0x100 (Main PCB Heartbeat / PWM Status)
-    else if (rxHeader.StdId == 0x100)
     {
       if (rxHeader.DLC >= 1)
       {
-        status.pwm_received = rxData[0];
+        status.actuator_active = rxData[0];
       }
-      status.main_pcb_last_seen = HAL_GetTick();
+      status.actuator_pcb_last_seen = HAL_GetTick();
+    }
+    // Parse ID 0x300 (GPS Lat & Lon)
+    else if (rxHeader.StdId == 0x300)
+    {
+      if (rxHeader.DLC >= 8)
+      {
+        float lat, lon;
+        uint8_t *lat_ptr = (uint8_t*)&lat;
+        uint8_t *lon_ptr = (uint8_t*)&lon;
+        for(int i = 0; i < 4; i++) {
+          lat_ptr[i] = rxData[i];
+          lon_ptr[i] = rxData[i+4];
+        }
+        status.latitude = lat;
+        status.longitude = lon;
+      }
+      status.nav_pcb_last_seen = HAL_GetTick();
+    }
+    // Parse ID 0x301 (Heading)
+    else if (rxHeader.StdId == 0x301)
+    {
+      if (rxHeader.DLC >= 4)
+      {
+        float head;
+        uint8_t *h_ptr = (uint8_t*)&head;
+        for(int i = 0; i < 4; i++) {
+          h_ptr[i] = rxData[i];
+        }
+        status.heading = head;
+      }
+      status.nav_pcb_last_seen = HAL_GetTick();
     }
   }
 }
