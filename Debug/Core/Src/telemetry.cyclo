@@ -1,2 +1,2 @@
-../Core/Src/telemetry.c:16:13:float_to_parts	2
-../Core/Src/telemetry.c:27:5:generate_telemetry_string	3
+../Core/Src/telemetry.c:14:13:float_to_parts	2
+../Core/Src/telemetry.c:25:5:generate_telemetry_string	3
