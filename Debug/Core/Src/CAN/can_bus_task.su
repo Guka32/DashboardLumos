@@ -1,0 +1,4 @@
+../Core/Src/CAN/can_bus_task.c:20:6:can_init	56	static
+../Core/Src/CAN/can_bus_task.c:50:6:HAL_CAN_RxFifo0MsgPendingCallback	56	static
+../Core/Src/CAN/can_bus_task.c:62:6:can_tx_update	48	static
+../Core/Src/CAN/can_bus_task.c:76:6:can_tx_task	16	static

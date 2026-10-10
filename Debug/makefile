@@ -9,8 +9,23 @@ RM := rm -rf
 
 # All of the sources participating in the build are defined here
 -include sources.mk
+-include USB_DEVICE/Target/subdir.mk
+-include USB_DEVICE/App/subdir.mk
+-include RTT/Syscalls/subdir.mk
+-include RTT/subdir.mk
+-include Middlewares/Third_Party/FreeRTOS/Source/portable/MemMang/subdir.mk
+-include Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F/subdir.mk
+-include Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/subdir.mk
+-include Middlewares/Third_Party/FreeRTOS/Source/subdir.mk
+-include Middlewares/ST/STM32_USB_Device_Library/Core/Src/subdir.mk
+-include Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Src/subdir.mk
 -include Drivers/STM32F4xx_HAL_Driver/Src/subdir.mk
 -include Core/Startup/subdir.mk
+-include Core/Src/Sensors/subdir.mk
+-include Core/Src/SBUS/subdir.mk
+-include Core/Src/PWM/subdir.mk
+-include Core/Src/CAN/subdir.mk
+-include Core/Src/Boat/subdir.mk
 -include Core/Src/subdir.mk
 -include objects.mk
 
@@ -34,34 +49,34 @@ $(wildcard ../makefile.init) \
 $(wildcard ../makefile.targets) \
 
 
-BUILD_ARTIFACT_NAME := Cortex4CAN
+BUILD_ARTIFACT_NAME := FullF103
 BUILD_ARTIFACT_EXTENSION := elf
 BUILD_ARTIFACT_PREFIX :=
 BUILD_ARTIFACT := $(BUILD_ARTIFACT_PREFIX)$(BUILD_ARTIFACT_NAME)$(if $(BUILD_ARTIFACT_EXTENSION),.$(BUILD_ARTIFACT_EXTENSION),)
 
 # Add inputs and outputs from these tool invocations to the build variables 
 EXECUTABLES += \
-Cortex4CAN.elf \
+FullF103.elf \
 
 MAP_FILES += \
-Cortex4CAN.map \
+FullF103.map \
 
 SIZE_OUTPUT += \
 default.size.stdout \
 
 OBJDUMP_LIST += \
-Cortex4CAN.list \
+FullF103.list \
 
 
 # All Target
 all: main-build
 
 # Main-build Target
-main-build: Cortex4CAN.elf secondary-outputs
+main-build: FullF103.elf secondary-outputs
 
 # Tool invocations
-Cortex4CAN.elf Cortex4CAN.map: $(OBJS) $(USER_OBJS) C:\Users\gutie\STM32CubeIDE\workspace_2.1\CAN44\Cortex4CAN\STM32F446RETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "Cortex4CAN.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\Users\gutie\STM32CubeIDE\workspace_2.1\CAN44\Cortex4CAN\STM32F446RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Cortex4CAN.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+FullF103.elf FullF103.map: $(OBJS) $(USER_OBJS) C:\Users\gutie\STM32CubeIDE\workspace_2.1\FullF103\STM32F446RETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "FullF103.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\Users\gutie\STM32CubeIDE\workspace_2.1\FullF103\STM32F446RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="FullF103.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
@@ -70,14 +85,14 @@ default.size.stdout: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
 	@echo 'Finished building: $@'
 	@echo ' '
 
-Cortex4CAN.list: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-objdump -h -S $(EXECUTABLES) > "Cortex4CAN.list"
+FullF103.list: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-objdump -h -S $(EXECUTABLES) > "FullF103.list"
 	@echo 'Finished building: $@'
 	@echo ' '
 
 # Other Targets
 clean:
-	-$(RM) Cortex4CAN.elf Cortex4CAN.list Cortex4CAN.map default.size.stdout
+	-$(RM) FullF103.elf FullF103.list FullF103.map default.size.stdout
 	-@echo ' '
 
 secondary-outputs: $(SIZE_OUTPUT) $(OBJDUMP_LIST)

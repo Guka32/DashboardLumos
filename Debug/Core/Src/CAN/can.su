@@ -1,0 +1,4 @@
+../Core/Src/CAN/can.c:11:12:handle_debug_msg_queue	48	static
+../Core/Src/CAN/can.c:30:6:send_can_debug_char	16	static
+../Core/Src/CAN/can.c:39:6:send_can_debug_msg	40	static
+../Core/Src/CAN/can.c:54:6:queue_can_msg	56	static

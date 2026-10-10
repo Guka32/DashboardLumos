@@ -7,12 +7,13 @@
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2026 STMicroelectronics.
-  * All rights reserved.
+  * <h2><center>&copy; Copyright (c) 2021 STMicroelectronics.
+  * All rights reserved.</center></h2>
   *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
+  * This software component is licensed by ST under BSD 3-Clause license,
+  * the "License"; You may not use this file except in compliance with the
+  * License. You may obtain a copy of the License at:
+  *                        opensource.org/licenses/BSD-3-Clause
   *
   ******************************************************************************
   */
@@ -49,6 +50,8 @@ extern "C" {
 
 /* USER CODE END EM */
 
+void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
+
 /* Exported functions prototypes ---------------------------------------------*/
 void Error_Handler(void);
 
@@ -57,9 +60,22 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define DEBUG_5_Pin GPIO_PIN_4
+#define DEBUG_5_GPIO_Port GPIOA
+#define DEBUG_2_Pin GPIO_PIN_2
+#define DEBUG_2_GPIO_Port GPIOB
+#define DEBUG_6_Pin GPIO_PIN_15
+#define DEBUG_6_GPIO_Port GPIOB
+#define DEBUG_3_Pin GPIO_PIN_9
+#define DEBUG_3_GPIO_Port GPIOC
+#define DEBUG_1_Pin GPIO_PIN_15
+#define DEBUG_1_GPIO_Port GPIOA
 
 /* USER CODE BEGIN Private defines */
-
+#define IBT2_R_EN_Pin GPIO_PIN_0
+#define IBT2_L_EN_Pin GPIO_PIN_1
+#define PUMP_EN_Pin GPIO_PIN_4
+#define PUMP_EN_GPIO_Port GPIOB
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

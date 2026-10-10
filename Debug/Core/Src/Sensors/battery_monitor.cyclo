@@ -1,0 +1,2 @@
+../Core/Src/Sensors/battery_monitor.c:14:6:battery_monitor_init	2
+../Core/Src/Sensors/battery_monitor.c:20:7:battery_monitor_poll	1
