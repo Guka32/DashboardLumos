@@ -8,12 +8,8 @@
 #include "SBUS/sbus.h"
 #include <string.h>
 
-static int min(int a, int b){
-	return (a > b) ? b : a;
-}
-
-extern UART_HandleTypeDef huart5;
 extern SBUS_Data sbusData;
+static uint8_t prevByte = 0xff;
 
 
 HAL_StatusTypeDef SBUS_Init(SBUS_Data *data, UART_HandleTypeDef *huart){
@@ -25,29 +21,30 @@ HAL_StatusTypeDef SBUS_Init(SBUS_Data *data, UART_HandleTypeDef *huart){
 	data->timestamp = 0;
 	data->msgLen = 0;
 
-	data->huart = huart;
+		data->huart = huart;
+	data->failsafe = true;
+	prevByte = 0xff;
 	return HAL_OK;
 }
 
-static uint8_t prevByte = 0xff;
-
-void SBUS_Update(){
-	uint8_t headerByte;
+void SBUS_Update(void){
+	uint8_t headerByte = 0U;
 	HAL_StatusTypeDef ret;
+	if(sbusData.huart == NULL) return;
+
 	int32_t lock = osKernelLock();
 	do {
-		ret = HAL_UART_Receive(&huart5, &headerByte, 1, 0);
-		//if(ret != HAL_OK){
-		//	HAL_UART_AbortReceive(&huart5);
-		//	return;
-		//}
+		ret = HAL_UART_Receive(sbusData.huart, &headerByte, 1, 0);
+		if(ret != HAL_OK) break;
 
 		if(headerByte == SBUS_HEADER && prevByte == SBUS_FOOTER){
-			//Start recv rest of data
-			memset(sbusData.msgBuffer, 0xFF, sizeof(sbusData.msgBuffer));
 			sbusData.msgBuffer[0] = headerByte;
-			if(HAL_UART_Receive(&huart5, sbusData.msgBuffer, SBUS_MSG_LEN, 50) == HAL_OK){
+			ret = HAL_UART_Receive(sbusData.huart, &sbusData.msgBuffer[1], SBUS_MSG_LEN - 1U, 50);
+			if(ret == HAL_OK){
 				SBUS_Parse(&sbusData);
+			} else {
+				/* A partial frame was consumed; resynchronize at the next footer. */
+				prevByte = 0xff;
 			}
 		} else {
 			prevByte = headerByte;
@@ -58,7 +55,9 @@ void SBUS_Update(){
 }
 
 
+
 void SBUS_Parse(SBUS_Data *data){
+	if(data == NULL) return;
 
 	if(data->msgBuffer[0] != SBUS_HEADER || data->msgBuffer[SBUS_MSG_LEN - 1] != SBUS_FOOTER){
 		//Data invalid!
@@ -90,8 +89,8 @@ void SBUS_Parse(SBUS_Data *data){
 	ch_[14] = buf_[20] >> 2 | buf_[21] << 6 & 0x07FF;
 	ch_[15] = buf_[21] >> 5 | buf_[22] << 3 & 0x07FF;
 
-	bool failsafe = buf_[SBUS_FLAGS_BYTE] & (1 << SBUS_FAILSAFE_BIT);
+	data->failsafe = (buf_[SBUS_FLAGS_BYTE] & (1U << SBUS_FAILSAFE_BIT)) != 0U;
 
-	if(!failsafe)
+	if(!data->failsafe)
 		data->timestamp = xTaskGetTickCount();
 }

@@ -1,6 +1,4 @@
-/*
- * Handles SBUS interface on an (already initialized) UART with DMA
- */
+/* Polls an initialized UART for 25-byte SBUS frames. */
 
 #pragma once
 
@@ -35,13 +33,7 @@ typedef struct {
 
 HAL_StatusTypeDef SBUS_Init(SBUS_Data *data, UART_HandleTypeDef *huart);
 
-/*
- * MUST BE ADDED TO HAL_UART_RxCpltCallback in order to handle DMA
- */
-void SBUS_RxCallback(SBUS_Data *data, UART_HandleTypeDef *huart);
-
-void SBUS_Update();
+void SBUS_Update(void);
 
 void SBUS_Parse(SBUS_Data *data);
 
-void UART5_IRQHandler(void);

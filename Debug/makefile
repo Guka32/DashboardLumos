@@ -49,34 +49,34 @@ $(wildcard ../makefile.init) \
 $(wildcard ../makefile.targets) \
 
 
-BUILD_ARTIFACT_NAME := FullF103
+BUILD_ARTIFACT_NAME := F446RE_USV
 BUILD_ARTIFACT_EXTENSION := elf
 BUILD_ARTIFACT_PREFIX :=
 BUILD_ARTIFACT := $(BUILD_ARTIFACT_PREFIX)$(BUILD_ARTIFACT_NAME)$(if $(BUILD_ARTIFACT_EXTENSION),.$(BUILD_ARTIFACT_EXTENSION),)
 
 # Add inputs and outputs from these tool invocations to the build variables 
 EXECUTABLES += \
-FullF103.elf \
+F446RE_USV.elf \
 
 MAP_FILES += \
-FullF103.map \
+F446RE_USV.map \
 
 SIZE_OUTPUT += \
 default.size.stdout \
 
 OBJDUMP_LIST += \
-FullF103.list \
+F446RE_USV.list \
 
 
 # All Target
 all: main-build
 
 # Main-build Target
-main-build: FullF103.elf secondary-outputs
+main-build: F446RE_USV.elf secondary-outputs
 
 # Tool invocations
-FullF103.elf FullF103.map: $(OBJS) $(USER_OBJS) C:\Users\gutie\STM32CubeIDE\workspace_2.1\FullF103\STM32F446RETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "FullF103.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\Users\gutie\STM32CubeIDE\workspace_2.1\FullF103\STM32F446RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="FullF103.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+F446RE_USV.elf F446RE_USV.map: $(OBJS) $(USER_OBJS) C:\Users\gutie\STM32CubeIDE\workspace_2.1\F446RE_USV\STM32F446RETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "F446RE_USV.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\Users\gutie\STM32CubeIDE\workspace_2.1\F446RE_USV\STM32F446RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="F446RE_USV.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
@@ -85,14 +85,14 @@ default.size.stdout: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
 	@echo 'Finished building: $@'
 	@echo ' '
 
-FullF103.list: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-objdump -h -S $(EXECUTABLES) > "FullF103.list"
+F446RE_USV.list: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-objdump -h -S $(EXECUTABLES) > "F446RE_USV.list"
 	@echo 'Finished building: $@'
 	@echo ' '
 
 # Other Targets
 clean:
-	-$(RM) FullF103.elf FullF103.list FullF103.map default.size.stdout
+	-$(RM) F446RE_USV.elf F446RE_USV.list F446RE_USV.map default.size.stdout
 	-@echo ' '
 
 secondary-outputs: $(SIZE_OUTPUT) $(OBJDUMP_LIST)

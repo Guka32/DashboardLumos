@@ -74,7 +74,6 @@ extern volatile unsigned long ulHighFrequencyTimerTicks;
 UART_HandleTypeDef huart4;
 UART_HandleTypeDef huart5;
 UART_HandleTypeDef huart1;
-DMA_HandleTypeDef hdma_uart5_rx;
 
 /* Definitions for defaultTask */
 osThreadId_t defaultTaskHandle;
@@ -137,9 +136,6 @@ void StartDefaultTask(void *argument);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
-	SBUS_RxCallback(&sbusData, &huart5);
-}
 /* USER CODE END 0 */
 
 /**
@@ -722,9 +718,6 @@ static void MX_UART5_Init(void)
   /* USER CODE END UART5_Init 0 */
 
   /* USER CODE BEGIN UART5_Init 1 */
-  __HAL_UART_ENABLE_IT(&huart5, UART_IT_IDLE);
-  NVIC_SetPriority(UART5_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(), 0, 0));
-  NVIC_EnableIRQ(UART5_IRQn);
   /* USER CODE END UART5_Init 1 */
   huart5.Instance = UART5;
   huart5.Init.BaudRate = 100000;
@@ -785,11 +778,6 @@ static void MX_DMA_Init(void)
 
   /* DMA controller clock enable */
   __HAL_RCC_DMA1_CLK_ENABLE();
-
-  /* DMA interrupt init */
-  /* DMA1_Stream0_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Stream0_IRQn, 5, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Stream0_IRQn);
 
 }
 
