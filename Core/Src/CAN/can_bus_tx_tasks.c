@@ -60,18 +60,24 @@ static void can_reset_bus_off(void *param){
 extern SBUS_Data sbusData;
 static void can_sbus_tx_task(void * param){
 	for(;;){
+		SBUS_Snapshot sbusSnapshot;
+		if (!SBUS_GetSnapshot(&sbusData, &sbusSnapshot)) {
+			osDelay(SBUS_DELAY);
+			continue;
+		}
+
 		// Broadcast SBUS data in chunks of 4 channels (8 bytes)
 		// Frame 1: Ch 0-3 (0x103)
-		queue_can_msg(0x103, 8, (uint8_t*)&sbusData.channels[0]);
+		queue_can_msg(0x103, 8, (uint8_t*)&sbusSnapshot.channels[0]);
 		// Frame 2: Ch 4-7 (0x104)
-		queue_can_msg(0x104, 8, (uint8_t*)&sbusData.channels[4]);
+		queue_can_msg(0x104, 8, (uint8_t*)&sbusSnapshot.channels[4]);
 		// Frame 3: Ch 8-11 (0x105)
-		queue_can_msg(0x105, 8, (uint8_t*)&sbusData.channels[8]);
+		queue_can_msg(0x105, 8, (uint8_t*)&sbusSnapshot.channels[8]);
 		// Frame 4: Ch 12-15 (0x106)
-		queue_can_msg(0x106, 8, (uint8_t*)&sbusData.channels[12]);
+		queue_can_msg(0x106, 8, (uint8_t*)&sbusSnapshot.channels[12]);
 		
 		// Frame 5: Failsafe (0x107)
-		uint8_t failsafe_payload = sbusData.failsafe;
+		uint8_t failsafe_payload = sbusSnapshot.failsafe ? 1U : 0U;
 		queue_can_msg(0x107, 1, &failsafe_payload);
 
 		osDelay(SBUS_DELAY);

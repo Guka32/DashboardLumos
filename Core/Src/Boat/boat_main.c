@@ -16,11 +16,17 @@
 #include <stdio.h>
 #include "telemetry.h"
 
-extern UART_HandleTypeDef huart5;
 extern UART_HandleTypeDef huart4;
 extern SBUS_Data sbusData;
 
 static bool boatArmed = false;
+static bool boatArmingInProgress = false;
+static uint8_t boatArmingPhase = 0U;
+static uint32_t boatArmingPhaseTick = 0U;
+static bool sbusRearmRequired = true;
+
+static bool boat_arming_update(void);
+static void boat_arming_cancel(void);
 
 static const osThreadAttr_t boatTask_attributes = {
   .name = "boatTask",
@@ -81,56 +87,92 @@ static void boat_update_mode_led(enum BoatState state, bool sbus_valid){
  */
 void mainTask_boat(void * params) {
 	pwm_init();
-	SBUS_Init(&sbusData, &huart5);
 
 	enum BoatState state = BoatState_Disabled;
-	enum BoatState aux = 0;
+	uint8_t aux = 0U;
 	for(;;){
 		SBUS_Update();
-		uint32_t sbus_dt = HAL_GetTick() - sbusData.timestamp;
-		bool sbus_valid = (sbusData.timestamp != 0U) && (sbus_dt <= 1000U);
-		/* SBUS freshness is based on the timestamp of any structurally valid frame;
-		 * the receiver failsafe bit is ignored. */
+		SBUS_Snapshot sbusSnapshot = {0};
+		bool snapshot_ok = SBUS_GetSnapshot(&sbusData, &sbusSnapshot);
+		uint32_t now = HAL_GetTick();
+		bool sbus_valid = snapshot_ok && SBUS_IsControlValid(&sbusSnapshot, now);
 
-		// Temporary CH5 test windows based on the measured Taranis positions (+/- 50).
-		// Manual=123, Auto=891, Stop=1147. Unknown values fail closed to Disabled.
-		uint16_t mode_ch5 = sbusData.channels[4];
-		if (!sbus_valid) state = BoatState_Disabled;
-		else if (mode_ch5 >= 73U && mode_ch5 <= 173U)
-			state = BoatState_Teleoperated;
-		else if (mode_ch5 >= 841U && mode_ch5 <= 941U)
-			state = BoatState_Autonomous;
-		else if (mode_ch5 >= 1097U && mode_ch5 <= 1197U)
+		// Restore the prior CH5 thresholds. Stop is below 900, Manual is
+		// 900-1109, and Auto is above 1100 (Manual takes precedence in overlap).
+		uint16_t mode_ch5 = sbusSnapshot.controlChannels[4];
+		bool stop_selected = (mode_ch5 < 900U);
+		bool mode_known = false;
+		enum BoatState requested_state = BoatState_Disabled;
+		if (mode_ch5 > 900U && mode_ch5 < 1110U) {
+			requested_state = BoatState_Teleoperated;
+			mode_known = true;
+		} else if (mode_ch5 > 1100U) {
+			requested_state = BoatState_Autonomous;
+			mode_known = true;
+		} else if (stop_selected) {
+			mode_known = true;
+		}
+
+		if (!sbus_valid || !mode_known) {
+			/* Any receiver failsafe, stale input, or unknown selector value
+			 * latches the boat in Disabled until a healthy Stop selection is seen.
+			 */
+			sbusRearmRequired = true;
 			state = BoatState_Disabled;
-		else state = BoatState_Disabled;
+			boatArmed = false;
+			boat_arming_cancel();
+		} else if (sbusRearmRequired) {
+			state = BoatState_Disabled;
+			boatArmed = false;
+			boat_arming_cancel();
+			if (stop_selected) sbusRearmRequired = false;
+		} else {
+			state = requested_state;
+		}
 
 		// update aux
-		if(sbusData.channels[5] < 900) aux = 0;
-		else if(sbusData.channels[5] > 900 && sbusData.channels[5] < 1110) aux = 1; /* was channels[4] — copy-paste error */
-		else if(sbusData.channels[5] > 1100) aux = 2;
+		if (sbus_valid && !sbusRearmRequired) {
+			if (sbusSnapshot.controlChannels[5] < 900U) aux = 0U;
+			else if (sbusSnapshot.controlChannels[5] > 900U && sbusSnapshot.controlChannels[5] < 1110U) aux = 1U;
+			else if (sbusSnapshot.controlChannels[5] > 1100U) aux = 2U;
+		} else {
+			aux = 0U;
+		}
 
-		// SBUS freshness and failsafe are included in sbus_valid above.
-
-		//Arm if necessary
-		if(!boatArmed && state != BoatState_Disabled){
-			boat_arming_sequence();
+		// Begin/advance arming without blocking the task; SBUS bytes continue
+		// entering the RX ring while neutral pulses are held.
+		if (state != BoatState_Disabled && !boatArmed) {
+			if (!boatArmingInProgress) {
+				boat_arming_sequence();
+			}
+			boat_arming_update();
+		} else if (state == BoatState_Disabled) {
+			boatArmed = false;
+			boat_arming_cancel();
 		}
 		char buffer[20];
-		snprintf(buffer, 20, "%d, %d\r\n", sbusData.channels[0], sbusData.channels[4]);
+		snprintf(buffer, 20, "%u, %u\r\n",
+			(unsigned int)sbusSnapshot.channels[0],
+			(unsigned int)sbusSnapshot.channels[4]);
 
 		SEGGER_RTT_WriteString(0, buffer);
 
-		//Update based on state
-		switch(state){
-		case BoatState_Autonomous:
-			boat_autonomous_loop();
-			break;
-		case BoatState_Teleoperated:
-			boat_teleoperated_loop();
-			break;
-		case BoatState_Disabled:
+		/* Do not run a control loop until the nonblocking arming interval ends. */
+		if (state == BoatState_Disabled || !boatArmed) {
 			boat_disabled_loop();
-			break;
+		} else {
+			switch(state){
+			case BoatState_Autonomous:
+				boat_autonomous_loop();
+				break;
+			case BoatState_Teleoperated:
+				boat_teleoperated_loop(sbusSnapshot.controlChannels);
+				break;
+			case BoatState_Disabled:
+			default:
+				boat_disabled_loop();
+				break;
+			}
 		}
 
 		boat_update_mode_led(state, sbus_valid);
@@ -200,7 +242,7 @@ void boat_autonomous_loop(){
 	}
 }
 
-void boat_teleoperated_loop(){
+void boat_teleoperated_loop(const uint16_t channels[16]){
 	// Fresh CAN actuator commands can exercise servos and the enabled IBT-2
 	// while the SBUS selector remains in manual mode.
 	if (boat_actuator_command_fresh()) {
@@ -209,9 +251,9 @@ void boat_teleoperated_loop(){
 		boat_actuator_failsafe();
 	}
 
-	// Take in motor control from SBUS, and write out to PWM
-	float throttle = (sbusData.channels[1] - 1000) / 1500.0;
-	float steer = (sbusData.channels[3] - 1000) / 1500.0;
+	// Right stick: SBUS CH2 is vertical throttle; CH3 is horizontal steering.
+	float throttle = (channels[1] - 1000) / 1500.0;
+	float steer = (channels[2] - 1000) / 1500.0;
 
 	float leftMotor, rightMotor;
 	leftMotor = -throttle + steer;
@@ -235,9 +277,29 @@ void boat_arming_sequence(){
 	pwm_set_ibt2_motor(0.0f);
 	for(int i = 0; i < 8; i++)
 		pwm_set(i, 0.0f); // Keep 1.5 ms neutral pulses during arming.
-	osDelay(1100);
-	for(int i = 0; i < 8; i++)
-		pwm_set(i, 0.0f);
-	osDelay(1100);
+	boatArmingInProgress = true;
+	boatArmingPhase = 1U;
+	boatArmingPhaseTick = HAL_GetTick();
+}
+
+static bool boat_arming_update(void){
+	if (!boatArmingInProgress) return boatArmed;
+	if ((HAL_GetTick() - boatArmingPhaseTick) < 1100U) return false;
+
+	if (boatArmingPhase == 1U) {
+		for (int i = 0; i < 8; i++) pwm_set(i, 0.0f);
+		boatArmingPhase = 2U;
+		boatArmingPhaseTick = HAL_GetTick();
+		return false;
+	}
+
+	boatArmingInProgress = false;
+	boatArmingPhase = 0U;
 	boatArmed = true;
+	return true;
+}
+
+static void boat_arming_cancel(void){
+	boatArmingInProgress = false;
+	boatArmingPhase = 0U;
 }

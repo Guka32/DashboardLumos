@@ -541,6 +541,9 @@ void HAL_UART_MspInit(UART_HandleTypeDef* huart)
     __HAL_RCC_UART5_CLK_ENABLE();
     __HAL_RCC_GPIOD_CLK_ENABLE();
 
+    HAL_NVIC_SetPriority(UART5_IRQn, 6, 0);
+    HAL_NVIC_EnableIRQ(UART5_IRQn);
+
     /**UART5 GPIO Configuration
     PD2     ------> UART5_RX (SBUS)
     */
@@ -607,6 +610,7 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef* huart)
   else if(huart->Instance==UART5)
   {
     __HAL_RCC_UART5_CLK_DISABLE();
+    HAL_NVIC_DisableIRQ(UART5_IRQn);
     HAL_GPIO_DeInit(GPIOD, GPIO_PIN_2);
   }
   else if(huart->Instance==USART1)

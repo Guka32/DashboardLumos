@@ -1,100 +1,264 @@
-/*
- * sbus.c
- *
- *  Created on: Jan 6, 2022
- *      Author: abiel
- */
+/* SBUS UART capture, frame assembly, and channel decoding. */
 
 #include "SBUS/sbus.h"
 #include <string.h>
 
+#define SBUS_RX_RING_SIZE 128U
+#define SBUS_RX_RING_MASK (SBUS_RX_RING_SIZE - 1U)
+
 extern SBUS_Data sbusData;
-static uint8_t prevByte = 0xff;
 
+static volatile uint8_t rxRing[SBUS_RX_RING_SIZE];
+static volatile uint16_t rxHead;
+static volatile uint16_t rxTail;
+static volatile uint32_t rxRecoveryEpoch;
+static uint32_t parserRecoveryEpoch;
+static uint8_t rxByte;
+static uint8_t frameBuffer[SBUS_MSG_LEN];
+static uint8_t frameLength;
 
-HAL_StatusTypeDef SBUS_Init(SBUS_Data *data, UART_HandleTypeDef *huart){
-	if(data == NULL || huart == NULL) return HAL_ERROR;
-
-	//set buffers to 0 (mostly for ease of debugging)
-	memset(data->channels, 0, sizeof(data->channels));
-	memset(data->msgBuffer, 0, sizeof(data->msgBuffer));
-	data->timestamp = 0;
-	data->msgLen = 0;
-
-		data->huart = huart;
-	data->failsafe = true;
-	prevByte = 0xff;
-	return HAL_OK;
+static void sbus_start_uart_receive(UART_HandleTypeDef *huart)
+{
+	if (HAL_UART_Receive_IT(huart, &rxByte, 1U) != HAL_OK) {
+		sbusData.rxRearmErrorCount++;
+		__DMB();
+		rxRecoveryEpoch++;
+	}
 }
 
-void SBUS_Update(void){
-	uint8_t headerByte = 0U;
-	HAL_StatusTypeDef ret;
-	if(sbusData.huart == NULL) return;
+HAL_StatusTypeDef SBUS_Init(SBUS_Data *data, UART_HandleTypeDef *huart)
+{
+	if (data == NULL || huart == NULL) return HAL_ERROR;
 
-	int32_t lock = osKernelLock();
-	do {
-		ret = HAL_UART_Receive(sbusData.huart, &headerByte, 1, 0);
-		if(ret != HAL_OK) break;
+	memset(data, 0, sizeof(*data));
+	data->huart = huart;
+	data->failsafe = true;	/* Fail closed until healthy frames arrive. */
 
-		if(headerByte == SBUS_HEADER && prevByte == SBUS_FOOTER){
-			sbusData.msgBuffer[0] = headerByte;
-			ret = HAL_UART_Receive(sbusData.huart, &sbusData.msgBuffer[1], SBUS_MSG_LEN - 1U, 50);
-			if(ret == HAL_OK){
-				SBUS_Parse(&sbusData);
-				// The last byte consumed is the SBUS footer; preserve it to sync the next frame.
-				prevByte = sbusData.msgBuffer[SBUS_MSG_LEN - 1U];
-			} else {
-				/* A partial frame was consumed; resynchronize at the next footer. */
-				prevByte = 0xff;
-			}
-		} else {
-			prevByte = headerByte;
+	rxHead = 0U;
+	rxTail = 0U;
+	rxRecoveryEpoch = 0U;
+	parserRecoveryEpoch = 0U;
+	rxByte = 0U;
+	frameLength = 0U;
+
+	return HAL_UART_Receive_IT(huart, &rxByte, 1U);
+}
+
+/* Called by the HAL after each UART5 byte. Never parse or block in this ISR. */
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+	if (huart != sbusData.huart) return;
+
+	uint16_t head = rxHead;
+	uint16_t next = (uint16_t)((head + 1U) & SBUS_RX_RING_MASK);
+	if (next == rxTail) {
+		sbusData.rxOverflowCount++;
+		__DMB();
+		rxRecoveryEpoch++;
+	} else {
+		rxRing[head] = rxByte;
+		__DMB();
+		rxHead = next;
+	}
+
+	sbus_start_uart_receive(huart);
+}
+
+/* A UART error invalidates the partial frame; reception is restarted if HAL
+ * ended the interrupted transfer. The task will resynchronize at a new header.
+ */
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
+{
+	if (huart != sbusData.huart) return;
+
+	sbusData.rxErrorCount++;
+	if ((huart->ErrorCode & HAL_UART_ERROR_ORE) != 0U) {
+		__HAL_UART_CLEAR_OREFLAG(huart);
+	}
+	__DMB();
+	rxRecoveryEpoch++;
+	if (huart->RxState == HAL_UART_STATE_READY) {
+		sbus_start_uart_receive(huart);
+	}
+}
+
+static void sbus_process_byte(SBUS_Data *data, uint8_t byte)
+{
+	if (frameLength == 0U) {
+		if (byte == SBUS_HEADER) {
+			frameBuffer[0] = byte;
+			frameLength = 1U;
 		}
-	} while(ret == HAL_OK);
-
-	osKernelRestoreLock(lock);
-}
-
-
-
-void SBUS_Parse(SBUS_Data *data){
-	if(data == NULL) return;
-
-	if(data->msgBuffer[0] != SBUS_HEADER || data->msgBuffer[SBUS_MSG_LEN - 1] != SBUS_FOOTER){
-		//Data invalid!
 		return;
 	}
 
-	uint16_t *ch_ = data->channels;
-	uint8_t *buf_ = data->msgBuffer;
+	frameBuffer[frameLength++] = byte;
+	if (frameLength < SBUS_MSG_LEN) return;
 
-	//Parse message
-	/* Each channel spans 11 bits packed across adjacent bytes.
-	 * Parenthesise the full OR before masking: without the outer parens
-	 * the mask applies only to the last shift term and zeros most of the value. */
-	ch_[0]  = ((uint16_t)buf_[1]        | (uint16_t)buf_[2]  << 8)  & 0x07FFU;
-	ch_[1]  = ((uint16_t)buf_[2]  >> 3  | (uint16_t)buf_[3]  << 5)  & 0x07FFU;
-	ch_[2]  = ((uint16_t)buf_[3]  >> 6  | (uint16_t)buf_[4]  << 2
-	                                     | (uint16_t)buf_[5]  << 10) & 0x07FFU;
-	ch_[3]  = ((uint16_t)buf_[5]  >> 1  | (uint16_t)buf_[6]  << 7)  & 0x07FFU;
-	ch_[4]  = ((uint16_t)buf_[6]  >> 4  | (uint16_t)buf_[7]  << 4)  & 0x07FFU;
-	ch_[5]  = ((uint16_t)buf_[7]  >> 7  | (uint16_t)buf_[8]  << 1
-	                                     | (uint16_t)buf_[9]  << 9)  & 0x07FFU;
-	ch_[6]  = ((uint16_t)buf_[9]  >> 2  | (uint16_t)buf_[10] << 6)  & 0x07FFU;
-	ch_[7]  = ((uint16_t)buf_[10] >> 5  | (uint16_t)buf_[11] << 3)  & 0x07FFU;
-	ch_[8]  = ((uint16_t)buf_[12]       | (uint16_t)buf_[13] << 8)  & 0x07FFU;
-	ch_[9]  = ((uint16_t)buf_[13] >> 3  | (uint16_t)buf_[14] << 5)  & 0x07FFU;
-	ch_[10] = ((uint16_t)buf_[14] >> 6  | (uint16_t)buf_[15] << 2
-	                                     | (uint16_t)buf_[16] << 10) & 0x07FFU;
-	ch_[11] = ((uint16_t)buf_[16] >> 1  | (uint16_t)buf_[17] << 7)  & 0x07FFU;
-	ch_[12] = ((uint16_t)buf_[17] >> 4  | (uint16_t)buf_[18] << 4)  & 0x07FFU;
-	ch_[13] = ((uint16_t)buf_[18] >> 7  | (uint16_t)buf_[19] << 1
-	                                     | (uint16_t)buf_[20] << 9)  & 0x07FFU;
-	ch_[14] = ((uint16_t)buf_[20] >> 2  | (uint16_t)buf_[21] << 6)  & 0x07FFU;
-	ch_[15] = ((uint16_t)buf_[21] >> 5  | (uint16_t)buf_[22] << 3)  & 0x07FFU;
+	if (frameBuffer[0] == SBUS_HEADER &&
+	    frameBuffer[SBUS_MSG_LEN - 1U] == SBUS_FOOTER) {
+		memcpy(data->msgBuffer, frameBuffer, SBUS_MSG_LEN);
+		SBUS_Parse(data);
+		frameLength = 0U;
+		return;
+	}
 
-	/* Accept every structurally valid frame, regardless of the SBUS failsafe bit.
-	 * Radio loss is detected when valid frames stop arriving. */
-	data->timestamp = HAL_GetTick();
+	/* Keep any possible header already seen inside the candidate, so a bad or
+	 * dropped byte does not force the parser to wait for a full new frame.
+	 */
+	uint8_t nextHeader = 1U;
+	while (nextHeader < SBUS_MSG_LEN &&
+	       frameBuffer[nextHeader] != SBUS_HEADER) {
+		nextHeader++;
+	}
+	if (nextHeader == SBUS_MSG_LEN) {
+		frameLength = 0U;
+	} else {
+		frameLength = (uint8_t)(SBUS_MSG_LEN - nextHeader);
+		memmove(frameBuffer, &frameBuffer[nextHeader], frameLength);
+	}
+}
+
+/* Drain all bytes currently captured by the ISR. This function never waits for
+ * UART data, and failsafe flags do not stop frame reception or parsing.
+ */
+void SBUS_Update(void)
+{
+	/* Recover if HAL left the receiver idle after an error or failed rearm. */
+	if (sbusData.huart != NULL &&
+	    sbusData.huart->RxState == HAL_UART_STATE_READY) {
+		sbus_start_uart_receive(sbusData.huart);
+	}
+
+	for (;;) {
+		uint32_t recoveryEpoch = rxRecoveryEpoch;
+		if (recoveryEpoch != parserRecoveryEpoch) {
+			parserRecoveryEpoch = recoveryEpoch;
+			frameLength = 0U;
+			/* A transport discontinuity is a control fault until three clean
+			 * frames arrive. Keep receiver failsafe reporting independent.
+			 */
+			int32_t lock = osKernelLock();
+			sbusData.healthyFrameStreak = 0U;
+			osKernelRestoreLock(lock);
+			/* Drop queued bytes from before the error/overflow and resume at the
+			 * next complete stream segment.
+			 */
+			rxTail = rxHead;
+			continue;
+		}
+
+		uint16_t tail = rxTail;
+		uint16_t head = rxHead;
+		if (tail == head) break;
+
+		uint8_t byte = rxRing[tail];
+		__DMB();
+		rxTail = (uint16_t)((tail + 1U) & SBUS_RX_RING_MASK);
+		sbus_process_byte(&sbusData, byte);
+	}
+}
+
+void SBUS_Parse(SBUS_Data *data)
+{
+	if (data == NULL || data->msgBuffer[0] != SBUS_HEADER ||
+	    data->msgBuffer[SBUS_MSG_LEN - 1U] != SBUS_FOOTER) {
+		return;
+	}
+
+	const uint8_t *buf = data->msgBuffer;
+	uint16_t channels[16];
+	channels[0]  = ((uint16_t)buf[1]        | (uint16_t)buf[2]  << 8)  & 0x07FFU;
+	channels[1]  = ((uint16_t)buf[2]  >> 3  | (uint16_t)buf[3]  << 5)  & 0x07FFU;
+	channels[2]  = ((uint16_t)buf[3]  >> 6  | (uint16_t)buf[4]  << 2
+	                                      | (uint16_t)buf[5]  << 10) & 0x07FFU;
+	channels[3]  = ((uint16_t)buf[5]  >> 1  | (uint16_t)buf[6]  << 7)  & 0x07FFU;
+	channels[4]  = ((uint16_t)buf[6]  >> 4  | (uint16_t)buf[7]  << 4)  & 0x07FFU;
+	channels[5]  = ((uint16_t)buf[7]  >> 7  | (uint16_t)buf[8]  << 1
+	                                      | (uint16_t)buf[9]  << 9)  & 0x07FFU;
+	channels[6]  = ((uint16_t)buf[9]  >> 2  | (uint16_t)buf[10] << 6)  & 0x07FFU;
+	channels[7]  = ((uint16_t)buf[10] >> 5  | (uint16_t)buf[11] << 3)  & 0x07FFU;
+	channels[8]  = ((uint16_t)buf[12]       | (uint16_t)buf[13] << 8)  & 0x07FFU;
+	channels[9]  = ((uint16_t)buf[13] >> 3  | (uint16_t)buf[14] << 5)  & 0x07FFU;
+	channels[10] = ((uint16_t)buf[14] >> 6  | (uint16_t)buf[15] << 2
+	                                      | (uint16_t)buf[16] << 10) & 0x07FFU;
+	channels[11] = ((uint16_t)buf[16] >> 1  | (uint16_t)buf[17] << 7)  & 0x07FFU;
+	channels[12] = ((uint16_t)buf[17] >> 4  | (uint16_t)buf[18] << 4)  & 0x07FFU;
+	channels[13] = ((uint16_t)buf[18] >> 7  | (uint16_t)buf[19] << 1
+	                                      | (uint16_t)buf[20] << 9)  & 0x07FFU;
+	channels[14] = ((uint16_t)buf[20] >> 2  | (uint16_t)buf[21] << 6)  & 0x07FFU;
+	channels[15] = ((uint16_t)buf[21] >> 5  | (uint16_t)buf[22] << 3)  & 0x07FFU;
+
+	uint8_t flags = buf[SBUS_FLAGS_BYTE];
+	bool failsafe = (flags & (1U << SBUS_FAILSAFE_BIT)) != 0U;
+	bool frameLost = (flags & (1U << SBUS_FRAME_LOST_BIT)) != 0U;
+	uint32_t now = HAL_GetTick();
+
+	/* Publish a whole frame under a short scheduler lock. UART interrupts remain
+	 * enabled, so bytes continue entering the ring while tasks cannot see a
+	 * partially updated channel set.
+	 */
+	int32_t lock = osKernelLock();
+	/* Keep raw channels visible for diagnostics/CAN even on receiver failsafe.
+	 * The boat consumes a separate copy that only healthy frames can update.
+	 */
+	memcpy(data->channels, channels, sizeof(channels));
+	if (!failsafe && !frameLost) {
+		memcpy(data->controlChannels, channels, sizeof(channels));
+	}
+	data->flags = flags;
+	data->failsafe = failsafe;
+	data->frameLost = frameLost;
+	data->timestamp = now;
+	data->validFrameCount++;
+
+	if (frameLost) {
+		if (data->frameLostStreak < 0xFFU) data->frameLostStreak++;
+	} else {
+		data->frameLostStreak = 0U;
+	}
+
+	if (failsafe) {
+		data->healthyFrameStreak = 0U;
+	} else if (!frameLost) {
+		if (data->healthyFrameStreak < SBUS_HEALTHY_FRAMES_REQUIRED) {
+			data->healthyFrameStreak++;
+		}
+		data->healthyTimestamp = now;
+	}
+	osKernelRestoreLock(lock);
+}
+
+bool SBUS_GetSnapshot(SBUS_Data *data, SBUS_Snapshot *snapshot)
+{
+	if (data == NULL || snapshot == NULL) return false;
+
+	int32_t lock = osKernelLock();
+	memcpy(snapshot->channels, data->channels, sizeof(snapshot->channels));
+	memcpy(snapshot->controlChannels, data->controlChannels, sizeof(snapshot->controlChannels));
+	snapshot->flags = data->flags;
+	snapshot->failsafe = data->failsafe;
+	snapshot->frameLost = data->frameLost;
+	snapshot->timestamp = data->timestamp;
+	snapshot->healthyTimestamp = data->healthyTimestamp;
+	snapshot->validFrameCount = data->validFrameCount;
+	snapshot->rxErrorCount = data->rxErrorCount;
+	snapshot->rxOverflowCount = data->rxOverflowCount;
+	snapshot->rxRearmErrorCount = data->rxRearmErrorCount;
+	snapshot->healthyFrameStreak = data->healthyFrameStreak;
+	snapshot->frameLostStreak = data->frameLostStreak;
+	osKernelRestoreLock(lock);
+	return true;
+}
+
+bool SBUS_IsControlValid(const SBUS_Snapshot *snapshot, uint32_t now)
+{
+	if (snapshot == NULL || snapshot->validFrameCount == 0U ||
+	    snapshot->failsafe ||
+	    snapshot->healthyFrameStreak < SBUS_HEALTHY_FRAMES_REQUIRED ||
+	    snapshot->frameLostStreak >= SBUS_FRAME_LOST_LIMIT) {
+		return false;
+	}
+
+	return (now - snapshot->healthyTimestamp) <= SBUS_CONTROL_TIMEOUT_MS;
 }

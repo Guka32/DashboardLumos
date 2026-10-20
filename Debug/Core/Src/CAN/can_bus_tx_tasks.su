@@ -1,7 +1,7 @@
 ../Core/Src/CAN/can_bus_tx_tasks.c:53:13:can_reset_bus_off	16	static
-../Core/Src/CAN/can_bus_tx_tasks.c:61:13:can_sbus_tx_task	24	static
-../Core/Src/CAN/can_bus_tx_tasks.c:81:13:can_debug_msg_tx_task	16	static
-../Core/Src/CAN/can_bus_tx_tasks.c:88:13:can_send_ping_task	24	static
-../Core/Src/CAN/can_bus_tx_tasks.c:100:13:debug_vars_task	24	static
-../Core/Src/CAN/can_bus_tx_tasks.c:112:13:can_battery_monitor_task	24	static
-../Core/Src/CAN/can_bus_tx_tasks.c:122:6:start_can_tx_tasks	8	static
+../Core/Src/CAN/can_bus_tx_tasks.c:61:13:can_sbus_tx_task	120	static
+../Core/Src/CAN/can_bus_tx_tasks.c:87:13:can_debug_msg_tx_task	16	static
+../Core/Src/CAN/can_bus_tx_tasks.c:94:13:can_send_ping_task	24	static
+../Core/Src/CAN/can_bus_tx_tasks.c:106:13:debug_vars_task	24	static
+../Core/Src/CAN/can_bus_tx_tasks.c:118:13:can_battery_monitor_task	24	static
+../Core/Src/CAN/can_bus_tx_tasks.c:128:6:start_can_tx_tasks	8	static

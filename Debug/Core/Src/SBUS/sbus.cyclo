@@ -1,3 +1,9 @@
-../Core/Src/SBUS/sbus.c:15:19:SBUS_Init	3
-../Core/Src/SBUS/sbus.c:30:6:SBUS_Update	7
-../Core/Src/SBUS/sbus.c:61:6:SBUS_Parse	4
+../Core/Src/SBUS/sbus.c:20:13:sbus_start_uart_receive	2
+../Core/Src/SBUS/sbus.c:29:19:SBUS_Init	3
+../Core/Src/SBUS/sbus.c:48:6:HAL_UART_RxCpltCallback	3
+../Core/Src/SBUS/sbus.c:70:6:HAL_UART_ErrorCallback	4
+../Core/Src/SBUS/sbus.c:85:13:sbus_process_byte	9
+../Core/Src/SBUS/sbus.c:125:6:SBUS_Update	5
+../Core/Src/SBUS/sbus.c:162:6:SBUS_Parse	11
+../Core/Src/SBUS/sbus.c:232:6:SBUS_GetSnapshot	3
+../Core/Src/SBUS/sbus.c:254:6:SBUS_IsControlValid	6

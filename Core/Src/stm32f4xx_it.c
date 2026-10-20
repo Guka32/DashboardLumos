@@ -59,6 +59,7 @@ extern PCD_HandleTypeDef hpcd_USB_OTG_FS;
 extern CAN_HandleTypeDef hcan2;
 extern TIM_HandleTypeDef htim14;
 extern TIM_HandleTypeDef htim13;
+extern UART_HandleTypeDef huart5;
 
 /* USER CODE BEGIN EV */
 
@@ -209,6 +210,14 @@ void CAN2_RX1_IRQHandler(void)
   /* USER CODE BEGIN CAN2_RX1_IRQn 1 */
 
   /* USER CODE END CAN2_RX1_IRQn 1 */
+}
+
+/**
+  * @brief This function handles UART5 global interrupt (SBUS RX).
+  */
+void UART5_IRQHandler(void)
+{
+  HAL_UART_IRQHandler(&huart5);
 }
 
 /**
