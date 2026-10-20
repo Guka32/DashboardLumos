@@ -3,8 +3,8 @@
 ../Core/Src/Boat/boat_main.c:46:13:boat_actuator_command_fresh	8	static
 ../Core/Src/Boat/boat_main.c:51:13:boat_apply_can_actuators	8	static
 ../Core/Src/Boat/boat_main.c:65:13:boat_update_mode_led	16	static
-../Core/Src/Boat/boat_main.c:83:6:mainTask_boat	216	static
-../Core/Src/Boat/boat_main.c:170:6:boat_autonomous_loop	16	static
-../Core/Src/Boat/boat_main.c:193:6:boat_teleoperated_loop	24	static
-../Core/Src/Boat/boat_main.c:214:6:boat_disabled_loop	16	static
-../Core/Src/Boat/boat_main.c:223:6:boat_arming_sequence	16	static
+../Core/Src/Boat/boat_main.c:82:6:mainTask_boat	216	static
+../Core/Src/Boat/boat_main.c:176:6:boat_autonomous_loop	16	static
+../Core/Src/Boat/boat_main.c:199:6:boat_teleoperated_loop	24	static
+../Core/Src/Boat/boat_main.c:220:6:boat_disabled_loop	16	static
+../Core/Src/Boat/boat_main.c:229:6:boat_arming_sequence	16	static

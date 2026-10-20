@@ -63,17 +63,16 @@ static void boat_apply_can_actuators(void){
 }
 
 static void boat_update_mode_led(enum BoatState state, bool sbus_valid){
-	// DEBUG_1/PA15: off=disabled, steady=manual, 1 Hz=auto, fast blink=SBUS lost.
-	if (!sbus_valid) {
-		HAL_GPIO_WritePin(DEBUG_1_GPIO_Port, DEBUG_1_Pin,
-			((HAL_GetTick() / 125U) & 1U) ? GPIO_PIN_SET : GPIO_PIN_RESET);
-	} else if (state == BoatState_Teleoperated) {
+	// PA15: solid on with no valid SBUS or in stop, off in manual, blinking in auto.
+	if (!sbus_valid || state == BoatState_Disabled) {
 		HAL_GPIO_WritePin(DEBUG_1_GPIO_Port, DEBUG_1_Pin, GPIO_PIN_SET);
+	} else if (state == BoatState_Teleoperated) {
+		HAL_GPIO_WritePin(DEBUG_1_GPIO_Port, DEBUG_1_Pin, GPIO_PIN_RESET);
 	} else if (state == BoatState_Autonomous) {
 		HAL_GPIO_WritePin(DEBUG_1_GPIO_Port, DEBUG_1_Pin,
-			((HAL_GetTick() / 500U) & 1U) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+			((HAL_GetTick() / 250U) & 1U) ? GPIO_PIN_SET : GPIO_PIN_RESET);
 	} else {
-		HAL_GPIO_WritePin(DEBUG_1_GPIO_Port, DEBUG_1_Pin, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(DEBUG_1_GPIO_Port, DEBUG_1_Pin, GPIO_PIN_SET);
 	}
 }
 
@@ -89,17 +88,24 @@ void mainTask_boat(void * params) {
 	for(;;){
 		SBUS_Update();
 		uint32_t sbus_dt = HAL_GetTick() - sbusData.timestamp;
-		//Update current state
-		if(sbusData.channels[4] < 900) state = BoatState_Disabled;
-		else if(sbusData.channels[4] > 900 && sbusData.channels[4] < 1110) state = BoatState_Teleoperated;
-		else if(sbusData.channels[4] > 1100) state = BoatState_Autonomous;
+		bool sbus_valid = (sbusData.timestamp != 0U) && (sbus_dt <= 1000U);
+		/* Failsafe is implicit: when the receiver flags failsafe, SBUS_Parse withholds
+		 * the timestamp update, so sbus_dt exceeds 1000 ms and sbus_valid goes false. */
+
+		// Original CH5 thresholds, applied only to fresh, non-failsafe SBUS data.
+		if (!sbus_valid) state = BoatState_Disabled;
+		else if (sbusData.channels[4] < 900U) state = BoatState_Disabled;
+		else if (sbusData.channels[4] > 900U && sbusData.channels[4] < 1110U)
+			state = BoatState_Teleoperated;
+		else if (sbusData.channels[4] > 1100U) state = BoatState_Autonomous;
+		else state = BoatState_Disabled;
 
 		// update aux
 		if(sbusData.channels[5] < 900) aux = 0;
-		else if(sbusData.channels[5] > 900 && sbusData.channels[4] < 1110) aux = 1;
+		else if(sbusData.channels[5] > 900 && sbusData.channels[5] < 1110) aux = 1; /* was channels[4] — copy-paste error */
 		else if(sbusData.channels[5] > 1100) aux = 2;
 
-		if(sbus_dt > 1000) state = BoatState_Disabled; //Disable if sbus is not rcv
+		// SBUS freshness and failsafe are included in sbus_valid above.
 
 		//Arm if necessary
 		if(!boatArmed && state != BoatState_Disabled){
@@ -123,7 +129,7 @@ void mainTask_boat(void * params) {
 			break;
 		}
 
-		boat_update_mode_led(state, sbus_dt <= 1000U);
+		boat_update_mode_led(state, sbus_valid);
 
 		// Broadcast telemetry over CAN at 10Hz (every 100ms since loop is 10ms)
 		if(op_mode_i > 10){
