@@ -94,12 +94,7 @@ void SBUS_Parse(SBUS_Data *data){
 	ch_[14] = ((uint16_t)buf_[20] >> 2  | (uint16_t)buf_[21] << 6)  & 0x07FFU;
 	ch_[15] = ((uint16_t)buf_[21] >> 5  | (uint16_t)buf_[22] << 3)  & 0x07FFU;
 
-	/* Always refresh the timestamp when a structurally valid frame is received
-	 * (header + footer already checked above). The X8R can report the failsafe
-	 * bit (bit 3 of byte 23) even while the RF link is active and channels are
-	 * responding — gating the timestamp on that bit leaves sbus_valid permanently
-	 * false. Radio loss is detected by frames stopping entirely: once no frame
-	 * arrives for >1000 ms, sbus_dt exceeds the threshold in boat_main and
-	 * sbus_valid goes false. */
+	/* Accept every structurally valid frame, regardless of the SBUS failsafe bit.
+	 * Radio loss is detected when valid frames stop arriving. */
 	data->timestamp = HAL_GetTick();
 }

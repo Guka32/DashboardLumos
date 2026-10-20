@@ -89,15 +89,19 @@ void mainTask_boat(void * params) {
 		SBUS_Update();
 		uint32_t sbus_dt = HAL_GetTick() - sbusData.timestamp;
 		bool sbus_valid = (sbusData.timestamp != 0U) && (sbus_dt <= 1000U);
-		/* Failsafe is implicit: when the receiver flags failsafe, SBUS_Parse withholds
-		 * the timestamp update, so sbus_dt exceeds 1000 ms and sbus_valid goes false. */
+		/* SBUS freshness is based on the timestamp of any structurally valid frame;
+		 * the receiver failsafe bit is ignored. */
 
-		// Original CH5 thresholds, applied only to fresh, non-failsafe SBUS data.
+		// Temporary CH5 test windows based on the measured Taranis positions (+/- 50).
+		// Manual=123, Auto=891, Stop=1147. Unknown values fail closed to Disabled.
+		uint16_t mode_ch5 = sbusData.channels[4];
 		if (!sbus_valid) state = BoatState_Disabled;
-		else if (sbusData.channels[4] < 900U) state = BoatState_Disabled;
-		else if (sbusData.channels[4] > 900U && sbusData.channels[4] < 1110U)
+		else if (mode_ch5 >= 73U && mode_ch5 <= 173U)
 			state = BoatState_Teleoperated;
-		else if (sbusData.channels[4] > 1100U) state = BoatState_Autonomous;
+		else if (mode_ch5 >= 841U && mode_ch5 <= 941U)
+			state = BoatState_Autonomous;
+		else if (mode_ch5 >= 1097U && mode_ch5 <= 1197U)
+			state = BoatState_Disabled;
 		else state = BoatState_Disabled;
 
 		// update aux
