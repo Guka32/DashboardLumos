@@ -553,6 +553,26 @@ void HAL_UART_MspInit(UART_HandleTypeDef* huart)
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
     GPIO_InitStruct.Alternate = GPIO_AF8_UART5;
     HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
+
+    /* UART5_RX DMA: DMA1 Stream 0, Channel 4 */
+    hdma_uart5_rx.Instance = DMA1_Stream0;
+    hdma_uart5_rx.Init.Channel = DMA_CHANNEL_4;
+    hdma_uart5_rx.Init.Direction = DMA_PERIPH_TO_MEMORY;
+    hdma_uart5_rx.Init.PeriphInc = DMA_PINC_DISABLE;
+    hdma_uart5_rx.Init.MemInc = DMA_MINC_ENABLE;
+    hdma_uart5_rx.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
+    hdma_uart5_rx.Init.MemDataAlignment = DMA_MDATAALIGN_BYTE;
+    hdma_uart5_rx.Init.Mode = DMA_NORMAL;
+    hdma_uart5_rx.Init.Priority = DMA_PRIORITY_HIGH;
+    hdma_uart5_rx.Init.FIFOMode = DMA_FIFOMODE_ENABLE;
+    hdma_uart5_rx.Init.FIFOThreshold = DMA_FIFO_THRESHOLD_FULL;
+    hdma_uart5_rx.Init.MemBurst = DMA_MBURST_SINGLE;
+    hdma_uart5_rx.Init.PeriphBurst = DMA_PBURST_SINGLE;
+    if (HAL_DMA_Init(&hdma_uart5_rx) != HAL_OK)
+    {
+      Error_Handler();
+    }
+    __HAL_LINKDMA(huart, hdmarx, hdma_uart5_rx);
   }
   else if(huart->Instance==USART1)
   {
@@ -611,6 +631,8 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef* huart)
   {
     __HAL_RCC_UART5_CLK_DISABLE();
     HAL_NVIC_DisableIRQ(UART5_IRQn);
+    HAL_NVIC_DisableIRQ(DMA1_Stream0_IRQn);
+    HAL_DMA_DeInit(huart->hdmarx);
     HAL_GPIO_DeInit(GPIOD, GPIO_PIN_2);
   }
   else if(huart->Instance==USART1)

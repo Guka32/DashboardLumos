@@ -5,6 +5,7 @@
 
 #define SBUS_RX_RING_SIZE 128U
 #define SBUS_RX_RING_MASK (SBUS_RX_RING_SIZE - 1U)
+#define SBUS_DMA_BLOCK_LEN SBUS_MSG_LEN
 
 extern SBUS_Data sbusData;
 
@@ -13,17 +14,35 @@ static volatile uint16_t rxHead;
 static volatile uint16_t rxTail;
 static volatile uint32_t rxRecoveryEpoch;
 static uint32_t parserRecoveryEpoch;
-static uint8_t rxByte;
+static uint8_t rxDmaBuffer[SBUS_DMA_BLOCK_LEN];
 static uint8_t frameBuffer[SBUS_MSG_LEN];
 static uint8_t frameLength;
 
-static void sbus_start_uart_receive(UART_HandleTypeDef *huart)
+static void sbus_enqueue_byte(uint8_t byte)
 {
-	if (HAL_UART_Receive_IT(huart, &rxByte, 1U) != HAL_OK) {
+	uint16_t head = rxHead;
+	uint16_t next = (uint16_t)((head + 1U) & SBUS_RX_RING_MASK);
+	if (next == rxTail) {
+		sbusData.rxOverflowCount++;
+		__DMB();
+		rxRecoveryEpoch++;
+	} else {
+		rxRing[head] = byte;
+		__DMB();
+		rxHead = next;
+	}
+}
+
+static HAL_StatusTypeDef sbus_start_uart_receive(UART_HandleTypeDef *huart)
+{
+	HAL_StatusTypeDef status = HAL_UART_Receive_DMA(huart, rxDmaBuffer,
+		(uint16_t)sizeof(rxDmaBuffer));
+	if (status != HAL_OK) {
 		sbusData.rxRearmErrorCount++;
 		__DMB();
 		rxRecoveryEpoch++;
 	}
+	return status;
 }
 
 HAL_StatusTypeDef SBUS_Init(SBUS_Data *data, UART_HandleTypeDef *huart)
@@ -38,27 +57,19 @@ HAL_StatusTypeDef SBUS_Init(SBUS_Data *data, UART_HandleTypeDef *huart)
 	rxTail = 0U;
 	rxRecoveryEpoch = 0U;
 	parserRecoveryEpoch = 0U;
-	rxByte = 0U;
+	memset(rxDmaBuffer, 0, sizeof(rxDmaBuffer));
 	frameLength = 0U;
 
-	return HAL_UART_Receive_IT(huart, &rxByte, 1U);
+	return sbus_start_uart_receive(huart);
 }
 
-/* Called by the HAL after each UART5 byte. Never parse or block in this ISR. */
+/* DMA callback: transfer the captured block into the parser ring, then rearm. */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
 	if (huart != sbusData.huart) return;
 
-	uint16_t head = rxHead;
-	uint16_t next = (uint16_t)((head + 1U) & SBUS_RX_RING_MASK);
-	if (next == rxTail) {
-		sbusData.rxOverflowCount++;
-		__DMB();
-		rxRecoveryEpoch++;
-	} else {
-		rxRing[head] = rxByte;
-		__DMB();
-		rxHead = next;
+	for (uint16_t i = 0U; i < SBUS_DMA_BLOCK_LEN; i++) {
+		sbus_enqueue_byte(rxDmaBuffer[i]);
 	}
 
 	sbus_start_uart_receive(huart);

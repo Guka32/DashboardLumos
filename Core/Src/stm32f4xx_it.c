@@ -60,6 +60,7 @@ extern CAN_HandleTypeDef hcan2;
 extern TIM_HandleTypeDef htim14;
 extern TIM_HandleTypeDef htim13;
 extern UART_HandleTypeDef huart5;
+extern DMA_HandleTypeDef hdma_uart5_rx;
 
 /* USER CODE BEGIN EV */
 
@@ -213,7 +214,15 @@ void CAN2_RX1_IRQHandler(void)
 }
 
 /**
-  * @brief This function handles UART5 global interrupt (SBUS RX).
+  * @brief This function handles DMA1 stream0 global interrupt (UART5 RX).
+  */
+void DMA1_Stream0_IRQHandler(void)
+{
+  HAL_DMA_IRQHandler(&hdma_uart5_rx);
+}
+
+/**
+  * @brief This function handles UART5 global interrupt (SBUS RX errors).
   */
 void UART5_IRQHandler(void)
 {
