@@ -96,17 +96,15 @@ void mainTask_boat(void * params) {
 		bool snapshot_ok = SBUS_GetSnapshot(&sbusData, &sbusSnapshot);
 		uint32_t now = HAL_GetTick();
 		bool sbus_valid = snapshot_ok && SBUS_IsControlValid(&sbusSnapshot, now);
-
-		// Restore the prior CH5 thresholds. Stop is below 900, Manual is
-		// 900-1109, and Auto is above 1100 (Manual takes precedence in overlap).
+		// CH5 selector ranges cover every SBUS value: Stop <= 900, Manual 901-1109, Auto >= 1110.
 		uint16_t mode_ch5 = sbusSnapshot.controlChannels[4];
-		bool stop_selected = (mode_ch5 < 900U);
+		bool stop_selected = (mode_ch5 <= 900U);
 		bool mode_known = false;
 		enum BoatState requested_state = BoatState_Disabled;
 		if (mode_ch5 > 900U && mode_ch5 < 1110U) {
 			requested_state = BoatState_Teleoperated;
 			mode_known = true;
-		} else if (mode_ch5 > 1100U) {
+		} else if (mode_ch5 >= 1110U) {
 			requested_state = BoatState_Autonomous;
 			mode_known = true;
 		} else if (stop_selected) {
@@ -132,9 +130,9 @@ void mainTask_boat(void * params) {
 
 		// update aux
 		if (sbus_valid && !sbusRearmRequired) {
-			if (sbusSnapshot.controlChannels[5] < 900U) aux = 0U;
-			else if (sbusSnapshot.controlChannels[5] > 900U && sbusSnapshot.controlChannels[5] < 1110U) aux = 1U;
-			else if (sbusSnapshot.controlChannels[5] > 1100U) aux = 2U;
+			if (sbusSnapshot.controlChannels[5] <= 900U) aux = 0U;
+			else if (sbusSnapshot.controlChannels[5] < 1110U) aux = 1U;
+			else aux = 2U;
 		} else {
 			aux = 0U;
 		}
