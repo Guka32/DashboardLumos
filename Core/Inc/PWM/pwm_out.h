@@ -15,12 +15,15 @@ typedef enum {
     PWM_CH_SERVO_UNSTICK = 4,  // PB6, TIM4_CH1
     PWM_CH_RESERVED_5 = 5,     // PB7, TIM4_CH2
     PWM_CH_RESERVED_6 = 6,     // PB8, TIM4_CH3
-    PWM_CH_RESERVED_7 = 7      // PB9, TIM4_CH4
+    PWM_CH_RESERVED_7 = 7,     // PB9, TIM4_CH4
+    PWM_CH_ESC_LEFT_MIRROR = 8,  // PB10, TIM2_CH3
+    PWM_CH_ESC_RIGHT_MIRROR = 9  // PA8, TIM1_CH1
 } pwm_output_channel_t;
 
 void pwm_init(void);
 
 // Standard 50 Hz signal, normalized input [-1, +1] maps to 1100-1900 us.
+// Setting either primary ESC channel also updates its mirrored ESC output.
 void pwm_set(uint8_t ch, float output);
 void pwm_set_raw(uint8_t ch, uint16_t output);
 uint16_t pwm_get_raw(uint8_t ch);

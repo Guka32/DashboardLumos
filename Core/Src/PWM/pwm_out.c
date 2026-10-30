@@ -4,6 +4,8 @@
 
 extern TIM_HandleTypeDef htim3;
 extern TIM_HandleTypeDef htim4;
+extern TIM_HandleTypeDef htim2;
+extern TIM_HandleTypeDef htim1;
 extern TIM_HandleTypeDef htim9;
 
 static uint8_t initialized = 0;
@@ -24,7 +26,7 @@ void pwm_init(void)
     if (initialized) return;
 
     // 50 Hz outputs start at the neutral 1.5 ms pulse.
-    for (uint8_t ch = 0; ch < 8; ++ch) {
+    for (uint8_t ch = 0; ch < 10; ++ch) {
         pwm_set(ch, 0.0f);
     }
     pwm_set_ibt2_motor(0.0f);
@@ -39,6 +41,11 @@ void pwm_init(void)
         }
     }
 
+    if (HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_3) != HAL_OK ||
+        HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1) != HAL_OK) {
+        Error_Handler();
+    }
+
     if (HAL_TIM_PWM_Start(&htim9, TIM_CHANNEL_1) != HAL_OK ||
         HAL_TIM_PWM_Start(&htim9, TIM_CHANNEL_2) != HAL_OK) {
         Error_Handler();
@@ -49,20 +56,48 @@ void pwm_init(void)
 
 void pwm_set_raw(uint8_t ch, uint16_t output)
 {
-    if (ch >= 8) return;
+    if (ch >= 10) return;
 
-    TIM_HandleTypeDef *timer = (ch < 4) ? &htim3 : &htim4;
-    uint32_t channel = timer_channels[ch % 4];
+    if (ch == PWM_CH_ESC_LEFT || ch == PWM_CH_ESC_LEFT_MIRROR) {
+        __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, output);
+        __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_3, output);
+        return;
+    }
+    if (ch == PWM_CH_ESC_RIGHT || ch == PWM_CH_ESC_RIGHT_MIRROR) {
+        __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, output);
+        __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, output);
+        return;
+    }
+
+    TIM_HandleTypeDef *timer;
+    uint32_t channel;
+    if (ch < 4) {
+        timer = &htim3;
+        channel = timer_channels[ch];
+    } else {
+        timer = &htim4;
+        channel = timer_channels[ch - 4];
+    }
     __HAL_TIM_SET_COMPARE(timer, channel, output);
+
 }
 
 void pwm_set(uint8_t ch, float output)
 {
-    if (ch >= 8) return;
+    if (ch >= 10) return;
 
     output = pwm_clamp(output, -1.0f, 1.0f);
     float pulse_us = 1500.0f + (output * 400.0f);
-    uint32_t arr = __HAL_TIM_GET_AUTORELOAD((ch < 4) ? &htim3 : &htim4);
+    uint32_t arr;
+    if (ch < 4) {
+        arr = __HAL_TIM_GET_AUTORELOAD(&htim3);
+    } else if (ch < 8) {
+        arr = __HAL_TIM_GET_AUTORELOAD(&htim4);
+    } else {
+        arr = (ch == PWM_CH_ESC_LEFT_MIRROR)
+            ? __HAL_TIM_GET_AUTORELOAD(&htim2)
+            : __HAL_TIM_GET_AUTORELOAD(&htim1);
+    }
 
     if (pulse_us < 0.0f) pulse_us = 0.0f;
     if (pulse_us > (float)arr) pulse_us = (float)arr;
@@ -72,10 +107,20 @@ void pwm_set(uint8_t ch, float output)
 
 uint16_t pwm_get_raw(uint8_t ch)
 {
-    if (ch >= 8) return 0;
+    if (ch >= 10) return 0;
 
-    TIM_HandleTypeDef *timer = (ch < 4) ? &htim3 : &htim4;
-    uint32_t channel = timer_channels[ch % 4];
+    TIM_HandleTypeDef *timer;
+    uint32_t channel;
+    if (ch < 4) {
+        timer = &htim3;
+        channel = timer_channels[ch];
+    } else if (ch < 8) {
+        timer = &htim4;
+        channel = timer_channels[ch - 4];
+    } else {
+        timer = (ch == PWM_CH_ESC_LEFT_MIRROR) ? &htim2 : &htim1;
+        channel = (ch == PWM_CH_ESC_LEFT_MIRROR) ? TIM_CHANNEL_3 : TIM_CHANNEL_1;
+    }
     return (uint16_t)__HAL_TIM_GET_COMPARE(timer, channel);
 }
 
