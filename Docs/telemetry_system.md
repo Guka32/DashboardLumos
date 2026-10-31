@@ -54,4 +54,4 @@ candump can0
 - CAN HAL MSP (pin + clock setup): `Core/Src/stm32f4xx_hal_msp.c`
 
 ---
-If you want, I can also update the CubeMX `.ioc` file to reflect the 125 kbps CAN timing so regenerations stay consistent.
+
